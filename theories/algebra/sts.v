@@ -11,44 +11,42 @@ Module sts.
 Structure stsT := Sts {
   state : Type;
   token : Type;
-  prim_step : relation state;
-  tok : state → propset token;
-}.
+  (* tokens are keys that let you make a transition. you KEEP them after the transition. in bitset application, your token was opposite of the state because tokens had to be consumed. So you cannot start with the token that allows you to unset the bits. Also, you cannot get that token in the middle of the call *)
+  step : state -> list token -> state -> Prop;
+  allTokens: list token
+                    }.
+
+Definition valid (s: stsT):=
+  NoDup (allTokens s) /\
+  (forall t:(token s), In t (allTokens s))
+  /\ (forall a l b, step s a l b -> NoDup l).
+
 Arguments Sts {_ _} _ _.
-Arguments prim_step {_} _ _.
-Arguments tok {_} _.
+Arguments step {_} _ _.
+Arguments allTokens _.
 Notation states sts := (propset (state sts)).
-Notation tokens sts := (propset (token sts)).
+Notation tokens sts := (list (token sts)).
 
 (** * Theory and definitions *)
 Section sts.
 Context {sts : stsT}.
 
-(** ** Step relations *)
-Inductive step : relation (state sts * tokens sts) :=
-  | Step s1 s2 T1 T2 :
-     prim_step s1 s2 → tok s1 ## T1 → tok s2 ## T2 →
-     tok s1 ∪ T1 ≡ tok s2 ∪ T2 → step (s1,T1) (s2,T2).
 Notation steps := (rtc step).
-Inductive frame_step (T : tokens sts) (s1 s2 : state sts) : Prop :=
-  (* Possible alternative definition: (tok s2) ## T) ∧ s \rightarrow s'.
-     This is not equivalent, but it might be good enough? *)
-  | Frame_step T1 T2 :
-     T1 ## tok s1 ∪ T → step (s1,T1) (s2,T2) → frame_step T s1 s2.
-Notation frame_steps T := (rtc (frame_step T)).
+Definition frame_step (myTokens : tokens sts) (s1 s2 : state sts) : Prop :=
+  exists ts, step s1 ts s2 /\ ts ## myTokens.
 
 (** ** Closure under frame steps *)
-Record closed (S : states sts) (T : tokens sts) : Prop := Closed {
-  closed_disjoint s : s ∈ S → tok s ## T;
-  closed_step s1 s2 : s1 ∈ S → frame_step T s1 s2 → s2 ∈ S
-}.
+Definition closed (S : states sts) (myTokens : tokens sts) : Prop := forall s1 s2, s1 ∈ S → frame_step myTokens s1 s2 → s2 ∈ S.
+
+Definition frame_steps t := (rtc (frame_step t)).
+
 Definition up (s : state sts) (T : tokens sts) : states sts :=
   {[ s' | frame_steps T s s' ]}.
 Definition up_set (S : states sts) (T : tokens sts) : states sts :=
   S ≫= λ s, up s T.
 
 (** Tactic setup *)
-Hint Resolve Step : core.
+(*Hint Resolve Step : core. *)
 Hint Extern 50 (equiv (A:=propset _) _ _) => set_solver : sts.
 Hint Extern 50 (¬equiv (A:=propset _) _ _) => set_solver : sts.
 Hint Extern 50 (_ ∈ _) => set_solver : sts.
@@ -56,11 +54,16 @@ Hint Extern 50 (_ ⊆ _) => set_solver : sts.
 Hint Extern 50 (_ ## _) => set_solver : sts.
 
 (** ** Setoids *)
+(* if I own fewer tokens, mmore frame/environment steps are possible *)
 Instance frame_step_mono : Proper (flip (⊆) ==> (=) ==> (=) ==> impl) frame_step.
 Proof.
   intros ?? HT ?? <- ?? <-; destruct 1; econstructor;
-    eauto with sts; set_solver.
+    eauto with sts; try set_solver.
+  destruct H.
+  split; eauto.
+  set_solver.
 Qed.
+
 Global Instance frame_step_proper : Proper ((≡) ==> (=) ==> (=) ==> iff) frame_step.
 Proof. move=> ?? /set_equiv_spec [??]; split; by apply frame_step_mono. Qed.
 Instance closed_proper' : Proper ((≡) ==> (≡) ==> impl) closed.
