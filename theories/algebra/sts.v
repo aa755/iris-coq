@@ -33,7 +33,7 @@ Context {sts : stsT}.
 
 Notation steps := (rtc step).
 Definition frame_step (myTokens : tokens sts) (s1 s2 : state sts) : Prop :=
-  exists ts, step s1 ts s2 /\ ts ## myTokens.
+exists ts, step s1 ts s2 /\ ts ## myTokens.
 
 (** ** Closure under frame steps *)
 Definition closed (S : states sts) (myTokens : tokens sts) : Prop := forall s1 s2, s1 ∈ S → frame_step myTokens s1 s2 → s2 ∈ S.
@@ -42,8 +42,8 @@ Definition frame_steps t := (rtc (frame_step t)).
 
 Definition up (s : state sts) (T : tokens sts) : states sts :=
   {[ s' | frame_steps T s s' ]}.
-Definition up_set (S : states sts) (T : tokens sts) : states sts :=
-  S ≫= λ s, up s T.
+
+Definition up_set (S : states sts) (T : tokens sts) : states sts := S ≫= λ s, up s T.
 
 (** Tactic setup *)
 (*Hint Resolve Step : core. *)
@@ -54,39 +54,91 @@ Hint Extern 50 (_ ⊆ _) => set_solver : sts.
 Hint Extern 50 (_ ## _) => set_solver : sts.
 
 (** ** Setoids *)
-(* if I own fewer tokens, mmore frame/environment steps are possible *)
+(* if I own fewer tokens, more frame/environment steps are possible *)
 Instance frame_step_mono : Proper (flip (⊆) ==> (=) ==> (=) ==> impl) frame_step.
 Proof.
   intros ?? HT ?? <- ?? <-; destruct 1; econstructor;
     eauto with sts; try set_solver.
   destruct H.
-  split; eauto.
-  set_solver.
+  split; eauto. set_solver.
 Qed.
 
 Global Instance frame_step_proper : Proper ((≡) ==> (=) ==> (=) ==> iff) frame_step.
-Proof. move=> ?? /set_equiv_spec [??]; split; by apply frame_step_mono. Qed.
+Proof.
+  intros  ? ? ? ? ? ? ? ? ?.
+  subst.
+  unfold frame_step. setoid_rewrite H. reflexivity.
+Qed.
+
+Instance frame_steps_proper' : Proper ((≡) ==> (=) ==> (=) ==> impl) (frame_steps).
+Proof.
+  intros  ? ? ? ? ? ? ? ? ? ?.
+  subst.
+  unfold frame_steps in *.
+  induction H2; eauto with sts.
+  reflexivity.
+  econstructor; eauto.
+  eapply frame_step_proper;[ | | | eauto]; eauto.
+Qed.
+
+
+Global Instance frame_steps_proper : Proper ((≡) ==> (=) ==> (=) ==> iff) (frame_steps).
+Proof.
+  intros  ? ? ? ? ? ? ? ? ?.
+  split; apply frame_steps_proper'; eauto.
+Qed.
+
 Instance closed_proper' : Proper ((≡) ==> (≡) ==> impl) closed.
-Proof. destruct 3; constructor; intros; setoid_subst; eauto. Qed.
+Proof.
+  unfold closed. intros  ? ? ? ? ? ?. setoid_rewrite H.
+  setoid_rewrite H0. reflexivity.
+Qed.
+
 Global Instance closed_proper : Proper ((≡) ==> (≡) ==> iff) closed.
 Proof. by split; apply closed_proper'. Qed.
+
+Lemma  Frame_step myToks T s1 s2:
+  T ## myToks → step s1 T s2 → frame_step myToks s1 s2.
+Proof using.
+  intros a b.
+  hnf.
+  eexists. split; eauto.
+Qed.
+
+Require Import SquiggleEq.tactics.
+        
+(* the more tokens I have, the larger is the transitive closure *)
 Global Instance up_preserving : Proper ((=) ==> flip (⊆) ==> (⊆)) up.
 Proof.
   intros s ? <- T T' HT ; apply elem_of_subseteq.
   induction 1 as [|s1 s2 s3 [T1 T2]]; [constructor|].
-  eapply elem_of_PropSet, rtc_l; [eapply Frame_step with T1 T2|]; eauto with sts.
+  repnd.
+  eapply elem_of_PropSet, rtc_l;
+    [eapply Frame_step|]; eauto with sts.
+  set_solver.
 Qed.
+
+Lemma propSetEquiv {A:Type} (P Q: A->Prop) :
+  (forall x, P x <-> Q x) -> {[ x | P x ]} ≡ {[ x | Q x ]}.
+  intros.
+Admitted.
+
 Global Instance up_proper : Proper ((=) ==> (≡) ==> (≡)) up.
 Proof.
-  by move=> ??? ?? /set_equiv_spec [??]; split; apply up_preserving.
+  intros ? ? ? ? ? H. subst.
+  unfold up.
+  apply propSetEquiv.
+  intros. rewrite H.
+  reflexivity.
 Qed.
+
 Global Instance up_set_preserving : Proper ((⊆) ==> flip (⊆) ==> (⊆)) up_set.
 Proof.
   intros S1 S2 HS T1 T2 HT. rewrite /up_set.
   f_equiv=> // s1 s2. by apply up_preserving.
 Qed.
 Global Instance up_set_proper : Proper ((≡) ==> (≡) ==> (≡)) up_set.
-Proof.
+Proof. set_equiv_spec
   move=> S1 S2 /set_equiv_spec [??] T1 T2 /set_equiv_spec [??];
     split; by apply up_set_preserving.
 Qed.
