@@ -500,8 +500,8 @@ Lemma sts_update_frag_up s1 S2 T1 T2 :
   (closed S2 T2) → s1 ∈ S2 → T2 ⊆ T1 → sts_frag_up s1 T1 ~~> sts_frag S2 T2.
 Proof.
   intros HC ? HT; apply sts_update_frag. intros HC1; split; last split; eauto using closed_steps.
-  - eapply  HC1, elem_of_up.
-  - rewrite <-HT. eapply up_subseteq; last done. apply HC, HC1, elem_of_up.
+  - rewrite <-HT. eapply up_subseteq; last done.
+    eauto using HC, HC1, elem_of_up.
 Qed.
 
 Lemma sts_up_set_intersection S1 Sf Tf :
@@ -513,7 +513,7 @@ Proof.
     eapply closed_steps, Hsup; first done. set_solver +Hs'.
 Qed.
 
-Global Instance sts_frag_core_id S : CoreId (sts_frag S ∅).
+Global Instance sts_frag_core_id S : CoreId (sts_frag S[]).
 Proof.
   constructor; split=> //= [[??]]. by rewrite /dra.dra_core /= sts.up_closed.
 Qed.
@@ -561,62 +561,3 @@ Proof.
   exists ∅; split_and?; done || set_solver+.
 Qed. *)
 End stsRA.
-
-(** STSs without tokens: Some stuff is simpler *)
-Module sts_notok.
-Structure stsT := Sts {
-  state : Type;
-  prim_step : relation state;
-}.
-Arguments Sts {_} _.
-Arguments prim_step {_} _ _.
-Notation states sts := (propset (state sts)).
-
-Definition stsT_token := Empty_set.
-Definition stsT_tok {sts : stsT} (_ : state sts) : propset stsT_token := ∅.
-
-Canonical Structure sts_notok (sts : stsT) : sts.stsT :=
-  sts.Sts (@prim_step sts) stsT_tok.
-Coercion sts_notok.sts_notok : sts_notok.stsT >-> sts.stsT.
-
-Section sts.
-  Context {sts : stsT}.
-  Implicit Types s : state sts.
-  Implicit Types S : states sts.
-
-  Notation prim_steps := (rtc prim_step).
-
-  Lemma sts_step s1 s2 : prim_step s1 s2 → sts.step (s1, ∅) (s2, ∅).
-  Proof. intros. split; set_solver. Qed.
-
-  Lemma sts_steps s1 s2 : prim_steps s1 s2 → sts.steps (s1, ∅) (s2, ∅).
-  Proof. induction 1; eauto using sts_step, rtc_refl, rtc_l. Qed.
-
-  Lemma frame_prim_step T s1 s2 : sts.frame_step T s1 s2 → prim_step s1 s2.
-  Proof. inversion 1 as [??? Hstep]. by inversion_clear Hstep. Qed.
-
-  Lemma prim_frame_step T s1 s2 : prim_step s1 s2 → sts.frame_step T s1 s2.
-  Proof.
-    intros Hstep. apply sts.Frame_step with ∅ ∅; first set_solver.
-    by apply sts_step.
-  Qed.
-
-  Lemma mk_closed S :
-    (∀ s1 s2, s1 ∈ S → prim_step s1 s2 → s2 ∈ S) → sts.closed S ∅.
-  Proof. intros ?. constructor; [by set_solver|eauto using frame_prim_step]. Qed.
-End sts.
-End sts_notok.
-
-Notation sts_notokT := sts_notok.stsT.
-Notation Sts_NoTok := sts_notok.Sts.
-
-Section sts_notokRA.
-  Context {sts : sts_notokT}.
-  Import sts_notok.
-  Implicit Types s : state sts.
-  Implicit Types S : states sts.
-
-  Lemma sts_notok_update_auth s1 s2 :
-    rtc prim_step s1 s2 → sts_auth s1 ∅ ~~> sts_auth s2 ∅.
-  Proof. intros. by apply sts_update_auth, sts_steps. Qed.
-End sts_notokRA.
