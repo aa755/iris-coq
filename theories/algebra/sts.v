@@ -187,26 +187,30 @@ Proof.
     split; eauto;set_solver.
 Qed.
 
-(*
-Lemma step_closed s1 s2 T1 T2 S Tf :
-  step (s1,T1) (s2,T2) → closed S Tf → s1 ∈ S → T1 ## Tf →
-  s2 ∈ S ∧ T2 ## Tf ∧ tok s2 ## T2.
+Lemma step_closed T s1 s2 S Tf :
+  step T s1 s2 -> T ## Tf → closed S Tf → s1 ∈ S
+  → s2 ∈ S.
 Proof.
-  inversion_clear 1 as [???? HR Hs1 Hs2]; intros [? Hstep]??; split_and?; auto.
-  - eapply Hstep with s1, Frame_step with T1 T2; auto with sts.
-  - set_solver -Hstep Hs1 Hs2.
+  intros.
+  unfold closed in H1.
+  specialize (H1 s1 s2 H2).
+  apply H1.
+  clear H1.
+  hnf.
+  exists T.
+  split; auto.
 Qed.
-Lemma steps_closed s1 s2 T1 T2 S Tf :
-  steps (s1,T1) (s2,T2) → closed S Tf → s1 ∈ S → T1 ## Tf →
-  tok s1 ## T1 → s2 ∈ S ∧ T2 ## Tf ∧ tok s2 ## T2.
+
+Lemma steps_closed T s1 s2 S Tf :
+  rtc (step T) s1 s2 -> T ## Tf → closed S Tf → s1 ∈ S
+  → s2 ∈ S.
 Proof.
-  remember (s1,T1) as sT1 eqn:HsT1; remember (s2,T2) as sT2 eqn:HsT2.
-  intros Hsteps; revert s1 T1 HsT1 s2 T2 HsT2.
-  induction Hsteps as [?|? [s2 T2] ? Hstep Hsteps IH];
-     intros s1 T1 HsT1 s2' T2' ?????; simplify_eq; first done.
-  destruct (step_closed s1 s2 T1 T2 S Tf) as (?&?&?); eauto.
+  intros Hsteps.
+  induction Hsteps as [?|? ? ? Hstep Hsteps IH];
+    intros; simplify_eq; first done.
+  apply IH; eauto.
+  eapply step_closed; eauto.
 Qed.
-*)
 (** ** Properties of the closure operators *)
 Lemma elem_of_up s T : s ∈ up s T.
 Proof. constructor. Qed.
@@ -473,12 +477,13 @@ Lemma sts_op_frag_up s T1 T2 :
 
 (** Frame preserving updates *)
 Lemma sts_update_auth s1 s2 T :
-  steps s1 → sts_auth s1 T1 ~~> sts_auth s2 T2.
+  rtc (step T) s1 s2 → sts_auth s1 T ~~> sts_auth s2 T.
 Proof.
   intros ?; apply validity_update.
   inversion 3 as [|? S ? Tf|]; simplify_eq/=; destruct_and?.
-  destruct (steps_closed s1 s2 T1 T2 S Tf) as (?&?&?); auto; [].
+  pose proof (steps_closed T s1 s2 S Tf); auto.
   repeat (done || constructor).
+  apply H6; auto.
 Qed.
 
 Lemma sts_update_frag S1 S2 T1 T2 :
@@ -492,10 +497,10 @@ Proof.
 Qed.
 
 Lemma sts_update_frag_up s1 S2 T1 T2 :
-  (tok s1 ## T1 → closed S2 T2) → s1 ∈ S2 → T2 ⊆ T1 → sts_frag_up s1 T1 ~~> sts_frag S2 T2.
+  (closed S2 T2) → s1 ∈ S2 → T2 ⊆ T1 → sts_frag_up s1 T1 ~~> sts_frag S2 T2.
 Proof.
   intros HC ? HT; apply sts_update_frag. intros HC1; split; last split; eauto using closed_steps.
-  - eapply HC, HC1, elem_of_up.
+  - eapply  HC1, elem_of_up.
   - rewrite <-HT. eapply up_subseteq; last done. apply HC, HC1, elem_of_up.
 Qed.
 
