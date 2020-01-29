@@ -12,14 +12,14 @@ Structure stsT := Sts {
   state : Type;
   token : Type;
   (* tokens are keys that let you make a transition. you KEEP them after the transition. in bitset application, your token was opposite of the state because tokens had to be consumed. So you cannot start with the token that allows you to unset the bits. Also, you cannot get that token in the middle of the call *)
-  step : state -> list token -> state -> Prop;
+  step :  list token -> state -> state -> Prop;
   allTokens: list token
                     }.
 
 Definition valid (s: stsT):=
   NoDup (allTokens s) /\
   (forall t:(token s), In t (allTokens s))
-  /\ (forall a l b, step s a l b -> NoDup l).
+  /\ (forall a l b, step s l a b -> NoDup l).
 
 Arguments Sts {_ _} _ _.
 Arguments step {_} _ _.
@@ -33,7 +33,7 @@ Context {sts : stsT}.
 
 Notation steps := (rtc step).
 Definition frame_step (myTokens : tokens sts) (s1 s2 : state sts) : Prop :=
-exists ts, step s1 ts s2 /\ ts ## myTokens.
+exists ts, step ts s1 s2 /\ ts ## myTokens.
 
 (** ** Closure under frame steps *)
 Definition closed (S : states sts) (myTokens : tokens sts) : Prop := forall s1 s2, s1 ∈ S → frame_step myTokens s1 s2 → s2 ∈ S.
@@ -98,7 +98,7 @@ Global Instance closed_proper : Proper ((≡) ==> (≡) ==> iff) closed.
 Proof. by split; apply closed_proper'. Qed.
 
 Lemma  Frame_step myToks T s1 s2:
-  T ## myToks → step s1 T s2 → frame_step myToks s1 s2.
+  T ## myToks → step T s1 s2 → frame_step myToks s1 s2.
 Proof using.
   intros a b.
   hnf.
