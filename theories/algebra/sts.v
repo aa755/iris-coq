@@ -299,7 +299,7 @@ Implicit Types S : states sts.
 Implicit Types T : tokens sts.
 
 Inductive sts_equiv : Equiv (car sts) :=
-  | auth_equiv s T1 T2 : T1 = T2 → auth s T1 ≡ auth s T2
+  | auth_equiv s T1 T2 : T1 ≡ T2 → auth s T1 ≡ auth s T2
   | frag_equiv S1 S2 T1 T2 : T1 ≡ T2 → S1 ≡ S2 → frag S1 T1 ≡ frag S2 T2.
 
 Existing Instance sts_equiv.
@@ -310,24 +310,27 @@ Instance sts_valid : Valid (car sts) := λ x,
   | frag S' T => closed S' T ∧  ∃ s, s ∈ S'
   end.
 
+(* what does the core represent. where is this used? *)
 Instance sts_core : Core (car sts) := λ x,
   match x with
-  | frag S' _ => frag (up_set S' ∅ ) ∅
-  | auth s _  => frag (up s ∅) ∅
+  | frag S' _ => frag (up_set S' [] ) []
+  | auth s _  => frag (up s []) []
   end.
 
 Inductive sts_disjoint : Disjoint (car sts) :=
   | frag_frag_disjoint S1 S2 T1 T2 :
      (∃ s, s ∈ S1 ∩ S2) → T1 ## T2 → frag S1 T1 ## frag S2 T2
   | auth_frag_disjoint s S T1 T2 : s ∈ S → T1 ## T2 → auth s T1 ## frag S T2
-  | frag_auth_disjoint s S T1 T2 : s ∈ S → T1 ## T2 → frag S T1 ## auth s T2.
+  | frag_auth_disjoint s S T1 T2 : s ∈ S → T1 ## T2 → frag S T1 ## auth s T2. (* disjointness is always symmetric. thus there should not be a need to specify this explicity. instead, there should be a relation transformer to perform closure under symmetry *)
+
 Existing Instance sts_disjoint.
 Instance sts_op : Op (car sts) := λ x1 x2,
   match x1, x2 with
-  | frag S1 T1, frag S2 T2 => frag (S1 ∩ S2) (T1 ∪ T2)
-  | auth s T1, frag _ T2 => auth s (T1 ∪ T2)
-  | frag _ T1, auth s T2 => auth s (T1 ∪ T2)
-  | auth s T1, auth _ T2 => auth s (T1 ∪ T2)(* never happens *)
+  | frag S1 T1, frag S2 T2 => frag (S1 ∩ S2) (T1 ++ T2)
+  | auth s T1, frag _ T2 => auth s (T1 ++ T2)
+  | frag _ T1, auth s T2 => auth s (T1 ++ T2)
+(* where do we specify that the next line is invalid ? the disjoint definition above*)
+  | auth s T1, auth _ T2 => auth s (T1 ++ T2)(* never happens *)
   end.
 
 Hint Extern 50 (equiv (A:=propset _) _ _) => set_solver : sts.
@@ -348,28 +351,43 @@ Proof.
   - by destruct 1; constructor.
   - destruct 1; inversion_clear 1; constructor; etrans; eauto.
 Qed.
+(* Require Import SquiggleEq.list. *)
+Global Instance propListSet {A:Type}:
+  Proper ((≡) ==> (≡) ==> (≡)) (@app A).
+Proof using.
+  intros ? ? ? ? ? ?.
+Admitted.
+Lemma appSym {A:Type} (a b: list A):
+  a ++ b ≡ b ++ a.
+Admitted.
+
+Hint Resolve appSym: sts.
+    
+
 Lemma sts_dra_mixin : DraMixin (car sts).
 Proof.
   split.
   - apply _.
-  - by do 2 destruct 1; constructor; setoid_subst.
+  - intros ? ? ? ? ? ?.
+    unfold op. unfold sts_op.
+    destruct H; destruct H0; setoid_subst; auto.
   - by destruct 1; constructor; setoid_subst.
   - by destruct 1; simpl; intros ?; setoid_subst.
   - by intros ? [|]; destruct 1; inversion_clear 1; econstructor; setoid_subst.
   - destruct 3; simpl in *; destruct_and?; eauto using closed_op;
       match goal with H : closed _ _ |- _ => destruct H end; set_solver.
-  - intros []; naive_solver eauto using closed_up, closed_up_set,
+  - intros [];    naive_solver eauto using closed_up_empty, closed_up_set_empty,
       elem_of_up, elem_of_up_set with sts.
   - intros [] [] [] _ _ _ _ _; constructor; rewrite ?assoc; auto with sts.
   - destruct 4; inversion_clear 1; constructor; auto with sts.
   - destruct 4; inversion_clear 1; constructor; auto with sts.
   - destruct 1; constructor; auto with sts.
-  - destruct 3; constructor; auto with sts.
+  - destruct 3; constructor; try auto with sts.
   - intros []; constructor; eauto with sts.
   - intros []; constructor; auto with sts.
   - intros [s T|S T]; constructor; auto with sts.
-    + rewrite (up_closed (up _ _)); auto using closed_up with sts.
-    + rewrite (up_closed (up_set _ _)); eauto using closed_up_set with sts.
+    + rewrite (up_closed (up _ _)); auto using closed_up_empty with sts.
+    + rewrite (up_closed (up_set _ _)); eauto using closed_up_set_empty with sts.
   - intros x y. exists (core (x ⋅ y))=> ?? Hxy; split_and?.
     + destruct Hxy; constructor; unfold up_set; set_solver.
     + destruct Hxy; simpl;
