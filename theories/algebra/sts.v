@@ -296,6 +296,7 @@ Instance sts_core : Core (car sts) := λ x,
   | auth s _  => frag (up s []) []
   end.
 
+(* this should rather be called "compatible" *)
 Inductive sts_disjoint : Disjoint (car sts) :=
   | frag_frag_disjoint S1 S2 T1 T2 :
      (∃ s, s ∈ S1 ∩ S2) → T1 ## T2 → frag S1 T1 ## frag S2 T2
@@ -308,7 +309,7 @@ Instance sts_op : Op (car sts) := λ x1 x2,
   | frag S1 T1, frag S2 T2 => frag (S1 ∩ S2) (T1 ++ T2)
   | auth s T1, frag _ T2 => auth s (T1 ++ T2)
   | frag _ T1, auth s T2 => auth s (T1 ++ T2)
-(* where do we specify that the next line is invalid ? the disjoint definition above*)
+(* where do we specify that the next line is invalid ? the [sts_disjoint] definition above.*)
   | auth s T1, auth _ T2 => auth s (T1 ++ T2)(* never happens *)
   end.
 
@@ -473,10 +474,12 @@ Lemma sts_update_auth s1 s2 T :
   rtc (step T) s1 s2 → sts_auth s1 T ~~> sts_auth s2 T.
 Proof.
   intros ?; apply validity_update.
-  inversion 3 as [|? S ? Tf|]; simplify_eq/=; destruct_and?.
-  pose proof (steps_closed T s1 s2 S Tf); auto.
+  intros ? Ha Hb Hc.
+  hnf in Hc.
+  inversion Hc. subst. simplify_eq/=. destruct_and?.
+  pose proof (steps_closed T s1 s2 S T2); auto.
   repeat (done || constructor).
-  apply H6; auto.
+  apply H3; auto.
 Qed.
 
 Lemma sts_update_frag S1 S2 T1 T2 :
@@ -584,4 +587,43 @@ Lemma valid2 : valid nextSetPost.
     destruct s2; [ firstorder | firstorder].
     exact true.
   - exists true. set_solver.
+Qed.
+
+
+Definition oneWay : stsT :=
+  @Sts bool unit
+      (fun keys init final => init=false /\ final=true).
+
+
+Lemma sts_update_auth2:
+  @sts_auth oneWay false [tt] ~~> @sts_auth oneWay true [tt].
+Proof.
+  apply sts_update_auth.
+  econstructor. hnf. tauto.
+  reflexivity.
+Qed.
+
+Lemma validity_update_iff  {A: draT} (x y : validity A) :
+  (∀ c, ✓ x → ✓ c → validity_car x ## c → ✓ y ∧ validity_car y ## c) <-> x ~~> y.
+Proof.
+  split.
+  - apply validity_update.
+  - intros H. setoid_rewrite cmra_discrete_update in H.
+    intros.
+    SearchAbout valid validity_car.
+    hnf.
+  split_and!; try eapply Hxy; eauto.
+Admitted.
+
+Lemma sts_update_auth3:
+ ~ (@sts_auth oneWay true [tt] ~~> @sts_auth oneWay false [tt]).
+Proof.
+  intros Hc.
+  rewrite <- validity_update_iff in Hc.
+  specialize (Hc (@sts.frag oneWay {[ s | s=true]} [])).
+  destruct Hc.
+  -  hnf. auto.
+  - hnf. firstorder. exists true. set_solver.
+  - hnf. econstructor. set_solver. set_solver.
+  - hnf in H0. inverts H0. inversion H4.
 Qed.
