@@ -6,6 +6,25 @@ Local Arguments valid _ _ !_ /.
 Local Arguments op _ _ !_ !_ /.
 Local Arguments core _ _ !_ /.
 
+(* copied from SquiggleEq *)
+Ltac exrepnd :=
+   repeat match goal with
+           | [ H : _ /\ _ |- _ ] => let name := fresh H in destruct H as [name H]
+           | [ H : prod _ _ |- _ ] => let name := fresh H in destruct H as [name H]
+           | [ H : exists (v : _),_  |- _ ] =>
+               let vname := fresh v in
+               let hname := fresh H in
+               destruct H as [vname hname]
+           | [ H : { v : _ | _ }  |- _ ] =>
+               let vname := fresh v in
+               let hname := fresh H in
+               destruct H as [vname hname]
+           | [ H : { v : _ & _ }  |- _ ] =>
+               let vname := fresh v in
+               let hname := fresh H in
+               destruct H as [vname hname]
+         end.
+
 (** * Definition of STSs *)
 Module sts.
 Structure stsT := Sts {
@@ -97,25 +116,6 @@ Proof using.
   hnf.
   eexists. split; eauto.
 Qed.
-
-(* copied from SquiggleEq *)
-Ltac exrepnd :=
-   repeat match goal with
-           | [ H : _ /\ _ |- _ ] => let name := fresh H in destruct H as [name H]
-           | [ H : prod _ _ |- _ ] => let name := fresh H in destruct H as [name H]
-           | [ H : exists (v : _),_  |- _ ] =>
-               let vname := fresh v in
-               let hname := fresh H in
-               destruct H as [vname hname]
-           | [ H : { v : _ | _ }  |- _ ] =>
-               let vname := fresh v in
-               let hname := fresh H in
-               destruct H as [vname hname]
-           | [ H : { v : _ & _ }  |- _ ] =>
-               let vname := fresh v in
-               let hname := fresh H in
-               destruct H as [vname hname]
-         end.
         
 (* the more tokens I have, the larger is the transitive closure *)
 Global Instance up_preserving : Proper ((=) ==> flip (⊆) ==> (⊆)) up.
@@ -560,7 +560,28 @@ Definition bit : stsT :=
   @Sts bool bool
       (fun keys init final => keys =[final]).
 
-(* because I own the token to set the bit (make it [true]), no other thread owns the token. Thus noone other thread can do the transition to set the bit *)
-Definition setterThreadPre :  sts.car bit :=
-  @sts.frag bit {[ s | True ]} [true].
+Definition clearThreadPre :  sts.car bit :=
+  @sts.frag bit {[ s | True ]} [false].
 
+Lemma valid1 : valid clearThreadPre.
+  hnf. split; firstorder.
+  exact true.
+Qed.
+
+(* if we have the token/permission to clear bits, nobody else can do it.
+So if the bit is [true], it is stable *) 
+Definition nextSetPost :  sts.car bit :=
+  @sts.frag bit {[ s | s=true ]} [false].
+
+Ltac inverts H := inversion H; subst; clear H.
+
+Lemma valid2 : valid nextSetPost.
+  hnf. split.
+  - hnf. intros. inverts H.
+    inverts H0.
+    exrepnd.
+    inverts H0.
+    destruct s2; [ firstorder | firstorder].
+    exact true.
+  - exists true. set_solver.
+Qed.
