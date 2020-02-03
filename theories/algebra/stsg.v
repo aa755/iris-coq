@@ -31,17 +31,21 @@ Structure stsT := Sts {
   state : Type;
   token : Type;
   (* tokens are keys that unlock transitions. you KEEP the tokens after the transition. the STS never owns a token. The tokens you locally own prevent others from making certain transitions *)
-  step :  forall (keys: list token (* interpreted as a set *)), state -> state -> Prop;
+  (*[stepr] should specify exactly the tokens needed and can choose any specific ordering. Below, [step], deals with the case
+of having more tokens and set equivalence (ordering/multiplicity invariance) *)
+  stepr :  forall (keys: list token), state -> state -> Prop;
   }.
 
 Arguments Sts {_ _} _.
-Arguments step {_} _ _.
+Arguments stepr {_} _ _.
 Notation states sts := (propset (state sts)).
 Notation tokens sts := (list (token sts)).
 
 (** * Theory and definitions *)
 Section sts.
 Context {sts : stsT}.
+Definition step  (allKeys: tokens sts) (s1 s2 : state sts): Prop :=
+  exists usedKeys, stepr usedKeys s1 s2 /\  usedKeys ⊆ allKeys.
 
 Notation steps := (rtc step).
 Definition frame_step (myTokens : tokens sts) (s1 s2 : state sts) : Prop :=
@@ -93,17 +97,27 @@ Proof.
   eapply frame_step_proper;[ | | | eauto]; eauto.
 Qed.
 
-
 Global Instance frame_steps_proper : Proper ((≡) ==> (=) ==> (=) ==> iff) (frame_steps).
 Proof.
   intros  ? ? ? ? ? ? ? ? ?.
   split; apply frame_steps_proper'; eauto.
 Qed.
 
+Instance closed_proper_sub : Proper ( (≡) ==> (⊆) ==> impl) closed.
+Proof.
+  unfold closed. intros  ? ? ? ? ? ? ? ? ? ? ?.
+  hnf in H3. exrepnd.
+  rewrite <- H in H2.
+  rewrite <- H.
+  specialize (H1 _ s2  H2).
+  apply H1. exists ts. split; eauto.
+  set_solver.
+Qed.
+
 Instance closed_proper' : Proper ((≡) ==> (≡) ==> impl) closed.
 Proof.
-  unfold closed. intros  ? ? ? ? ? ?. setoid_rewrite H.
-  setoid_rewrite H0. reflexivity.
+  intros ? ? ? ? ? ?.
+  apply closed_proper_sub; auto; set_solver.
 Qed.
 
 Global Instance closed_proper : Proper ((≡) ==> (≡) ==> iff) closed.
@@ -564,10 +578,10 @@ Definition bit : stsT :=
       (fun keys init final => keys =[final]).
 
 Definition clearThreadPre :  sts.car bit :=
-  @sts.frag bit {[ s | True ]} [false].
+  @sts.frag bit ⊤ [false].
 
 Lemma valid1 : valid clearThreadPre.
-  hnf. split; firstorder.
+  hnf. split; unfold sts.closed; firstorder.
   exact true.
 Qed.
 
@@ -599,7 +613,8 @@ Lemma sts_update_auth2:
   @sts_auth oneWay false [tt] ~~> @sts_auth oneWay true [tt].
 Proof.
   apply sts_update_auth.
-  econstructor. hnf. tauto.
+  econstructor. hnf. exists [tt]. hnf. split; eauto.
+  constructor; auto.
   reflexivity.
 Qed.
 
